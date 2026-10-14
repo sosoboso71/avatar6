@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+
+<style>
+html, body {
+    width: 1080px;
+    height: 1920px;
+    margin: 0;
+    padding: 0;
+    overflow: hidden;
+    background: transparent;
+}
+
+#canvas { position: absolute; top: 0; left: 0; }
+#fx { position: absolute; width: 1080px; height: 1920px; pointer-events: none; }
+
+/* ZOOM MARE */
+.big-profile {
+    position: absolute;
+    width: 700px;
+    height: 700px;
+    border-radius: 0px; /* PĂTRAT */
+    object-fit: cover;
+    border: 18px solid transparent;
+    animation: bigProfile 5s ease-out forwards;
+}
+
+@keyframes bigProfile {
+    0% { transform: scale(0.1); opacity: 0; }
+    20% { transform: scale(1.25); opacity: 1; }
+    40% { transform: scale(1.05); opacity: 1; }
+    100% { transform: scale(1); opacity: 0; }
+}
+
+.big-name-inside {
+    position: absolute;
+    bottom: 20px;
+    left: 0;
+    width: 100%;
+    text-align: center;
+    font-weight: 900;
+    color: white;
+    text-shadow: 0 0 15px black;
+    pointer-events: none;
+    font-size: 60px;
+    padding: 0 20px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: clip;
+    transform-origin: center;
+}
+
+/* EXPLOZIE CADOU */
+@keyframes explode {
+    0% { transform: scale(0.1); opacity: 1; }
+    50% { transform: scale(2.5); opacity: 1; }
+    100% { transform: scale(3.5); opacity: 0; }
+}
+
+.explosion {
+    position: absolute;
+    width: 200px;
+    height: 200px;
+    border-radius: 0px; /* PĂTRAT */
+    background: radial-gradient(circle, white, yellow, red);
+    animation: explode 0.7s ease-out forwards;
+    pointer-events: none;
+}
+</style>
+</head>
+
+<body>
+
+<canvas id="canvas"></canvas>
+<div id="fx"></div>
+
+<audio id="joinSound" src="join.mp3"></audio>
+<audio id="giftSound" src="gift.mp3"></audio>
+
+<script>
+/* CANVAS FIX 1080×1920 */
+const canvas = document.getElementById("canvas");
+const ctx = canvas.getContext("2d");
+
+canvas.width = 1080;
+canvas.height = 1920;
+
+/* LISTE */
+let objects = [];
+let floatingUsers = new Set();
+let activeUsers = new Map();
+let profileCache = {};
+
+const ACTIVE_TIMEOUT = 300000; // 5 minute
+
+function markActivity(uid) {
+    activeUsers.set(uid, Date.now());
+}
+
+function cleanupInactive() {
+    const now = Date.now();
+    for (const [uid, last] of activeUsers.entries()) {
+        if (now - last > ACTIVE_TIMEOUT) {
+            fadeOutAvatar(uid);
+        }
+    }
+}
+setInterval(cleanupInactive, 2000);
+
+/* FADE OUT */
+function fadeOutAvatar(uid) {
+    const obj = objects.find(o => o.uid === uid);
+    if (!obj) return;
+
+    obj.fade = 1;
+    obj.fading = true;
+
+    setTimeout(() => {
+        objects = objects.filter(o => o.uid !== uid);
+        floatingUsers.delete(uid);
+        activeUsers.delete(uid);
+    }, 800);
+}
+
+/* ÎNCĂRCARE POZE */
+function loadProfile(url, callback) {
+    if (!url) return;
+    if (profileCache[url]) return callback(profileCache[url]);
+
+    const img = new Image();
+    img.crossOrigin = "anonymous";
+    img.onload = () => {
+        profileCache[url] = img;
+        callback(img);
+    };
+    img.src = url;
+}
+
+/* SPAWN AVATAR */
+function spawnFloatingAvatar(url, uid) {
+    if (!url || !uid) return;
+
+    markActivity(uid);
+
+    if (floatingUsers.has(uid)) return;
+
+    if (objects.length > 25) return;
+
+    floatingUsers.add(uid);
+
+    loadProfile(url, (img) => {
+        const neonColor = `hsl(${Math.random()*360}, 100%, 50%)`;
+
+        objects.push({
+            uid: uid,
+            img: img,
+            neon: neonColor,
+            x: Math.random() * 1080,
+            y: Math.random() * 1920,
+            vx: (Math.random() * 2 - 1),
+            vy: (Math.random() * 2 - 1),
+            size: 220,
+            fade: 1,
+            fading: false
+        });
+    });
+}
+
+/* DESEN AVATAR PĂTRAT + GLOW + FADE */
+function drawSquareImage(ctx, o) {
+    const { img, x, y, size, neon, fade } = o;
+
+    ctx.save();
+    ctx.globalAlpha = fade;
+
+    const glow = 6 + Math.sin(Date.now() / 400) * 3;
+
+    ctx.strokeStyle = neon;
+    ctx.lineWidth = 10;
+    ctx.strokeRect(x - size/2 - glow, y - size/2 - glow, size + glow*2, size + glow*2);
+
+    ctx.drawImage(img, x - size/2, y - size/2, size, size);
+
+    ctx.restore();
+}
+
+/* RESPINGERE */
+function repelAvatars() {
+    for (let i = 0; i < objects.length; i++) {
+        for (let j = i + 1; j < objects.length; j++) {
+            const a = objects[i];
+            const b = objects[j];
+
+            const dx = b.x - a.x;
+            const dy = b.y - a.y;
+            const dist = Math.sqrt(dx*dx + dy*dy);
+
+            if (dist < 180) {
+                const angle = Math.atan2(dy, dx);
+                const force = 2.0;
+
+                a.vx -= Math.cos(angle) * force;
+                a.vy -= Math.sin(angle) * force;
+
+                b.vx += Math.cos(angle) * force;
+                b.vy += Math.sin(angle) * force;
+            }
+        }
+    }
+}
+
+/* MARGINI */
+function fixEdges(o) {
+    const r = o.size / 2;
+
+    if (o.x < r) { o.x = r; o.vx *= -1; }
+    if (o.x > 1080 - r) { o.x = 1080 - r; o.vx *= -1; }
+    if (o.y < r) { o.y = r; o.vy *= -1; }
+    if (o.y > 1920 - r) { o.y = 1920 - r; o.vy *= -1; }
+}
+
+/* LOOP FPS 24 */
+let lastFrame = 0;
+const fpsInterval = 1000 / 24;
+
+function loop(ts) {
+    if (ts - lastFrame < fpsInterval) {
+        requestAnimationFrame(loop);
+        return;
+    }
+    lastFrame = ts;
+
+    ctx.clearRect(0, 0, 1080, 1920);
+
+    repelAvatars();
+
+    for (const o of objects) {
+        o.x += o.vx;
+        o.y += o.vy;
+
+        fixEdges(o);
+
+        if (o.fading) o.fade -= 0.05;
+
+        drawSquareImage(ctx, o);
+    }
+
+    requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+
+/* EXPLOZIE CADOU */
+function spawnExplosion(x, y) {
+    const fx = document.getElementById("fx");
+    const boom = document.createElement("div");
+    boom.className = "explosion";
+    boom.style.left = (x - 100) + "px";
+    boom.style.top = (y - 100) + "px";
+    fx.appendChild(boom);
+    setTimeout(() => boom.remove(), 700);
+}
+
+/* ZOOM MARE PĂTRAT */
+function spawnBigProfile(url, username) {
+    if (!url) return;
+
+    const fx = document.getElementById("fx");
+
+    const wrapper = document.createElement("div");
+    wrapper.style.position = "absolute";
+
+    wrapper.style.left = (canvas.width / 2 - 350) + "px";
+    wrapper.style.top = (canvas.height / 2 - 350) + "px";
+
+    wrapper.style.width = "700px";
+    wrapper.style.height = "700px";
+    wrapper.style.pointerEvents = "none";
+    wrapper.style.animation = "bigProfile 5s ease-out forwards";
+
+    const img = document.createElement("img");
+    img.src = url;
+    img.className = "big-profile";
+    img.style.borderColor = `hsl(${Math.random()*360}, 100%, 50%)`;
+
+    const name = document.createElement("div");
+    name.className = "big-name-inside";
+    name.innerText = username;
+
+    wrapper.appendChild(img);
+    wrapper.appendChild(name);
+    fx.appendChild(wrapper);
+
+    setTimeout(() => {
+        const maxWidth = 660;
+        let fontSize = 60;
+
+        while (name.scrollWidth > maxWidth && fontSize > 20) {
+            fontSize -= 2;
+            name.style.fontSize = fontSize + "px";
+        }
+    }, 10);
+
+    setTimeout(() => wrapper.remove(), 5000);
+}
+
+/* WEBSOCKET */
+function getProfileUrl(data) {
+    return data.profilePictureUrl ||
+           data.userDetails?.profilePictureUrls?.[0] ||
+           null;
+}
+
+const ws = new WebSocket("ws://localhost:62024");
+
+ws.onmessage = (event) => {
+    let packet;
+    try { packet = JSON.parse(event.data); } catch(e) { return; }
+
+    const data = packet.data || {};
+    const uid = data.secUid || data.userId || data.uniqueId;
+    const profileUrl = getProfileUrl(data);
+    const username = data.nickname || data.uniqueId || "User";
+
+    if (!uid) return;
+
+    if (packet.event === "member") {
+        markActivity(uid);
+        document.getElementById("joinSound").play();
+        spawnBigProfile(profileUrl, username);
+        spawnFloatingAvatar(profileUrl, uid);
+        return;
+    }
+
+    if (packet.event === "gift") {
+        markActivity(uid);
+        document.getElementById("giftSound").play();
+        spawnBigProfile(profileUrl, username);
+        spawnFloatingAvatar(profileUrl, uid);
+
+        const obj = objects.find(o => o.uid === uid);
+        if (obj) spawnExplosion(obj.x, obj.y);
+
+        return;
+    }
+
+    if (packet.event === "chat") {
+        markActivity(uid);
+        spawnFloatingAvatar(profileUrl, uid);
+        return;
+    }
+
+    if (packet.event === "like") {
+        markActivity(uid);
+        spawnFloatingAvatar(profileUrl, uid);
+        return;
+    }
+};
+</script>
+
+</body>
+</html>
