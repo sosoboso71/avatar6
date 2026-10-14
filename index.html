@@ -1,4 +1,4 @@
-<!DOCTYPE html>
+ <!DOCTYPE html>
 <html>
 <head>
 <meta charset="UTF-8">
@@ -16,14 +16,15 @@ html, body {
 #canvas { position: absolute; top: 0; left: 0; }
 #fx { position: absolute; width: 1080px; height: 1920px; pointer-events: none; }
 
-/* ZOOM MARE */
+/* ZOOM MARE INSTAGRAM */
 .big-profile {
     position: absolute;
     width: 700px;
     height: 700px;
-    border-radius: 0px; /* PĂTRAT */
+    border-radius: 40px; /* COLȚURI ROTUNJITE */
     object-fit: cover;
-    border: 18px solid transparent;
+    border: 10px solid rgba(255,255,255,0.7); /* BORDER SOFT */
+    box-shadow: 0 0 40px rgba(255,255,255,0.4); /* GLOW SOFT */
     animation: bigProfile 5s ease-out forwards;
 }
 
@@ -63,7 +64,7 @@ html, body {
     position: absolute;
     width: 200px;
     height: 200px;
-    border-radius: 0px; /* PĂTRAT */
+    border-radius: 20px; /* COLȚURI ROTUNJITE */
     background: radial-gradient(circle, white, yellow, red);
     animation: explode 0.7s ease-out forwards;
     pointer-events: none;
@@ -151,7 +152,7 @@ function spawnFloatingAvatar(url, uid) {
     floatingUsers.add(uid);
 
     loadProfile(url, (img) => {
-        const neonColor = `hsl(${Math.random()*360}, 100%, 50%)`;
+        const neonColor = `hsl(${Math.random()*360}, 100%, 70%)`; /* pastel */
 
         objects.push({
             uid: uid,
@@ -168,19 +169,26 @@ function spawnFloatingAvatar(url, uid) {
     });
 }
 
-/* DESEN AVATAR PĂTRAT + GLOW + FADE */
+/* DESEN AVATAR INSTAGRAM */
 function drawSquareImage(ctx, o) {
     const { img, x, y, size, neon, fade } = o;
 
     ctx.save();
     ctx.globalAlpha = fade;
 
-    const glow = 6 + Math.sin(Date.now() / 400) * 3;
+    const glow = 4 + Math.sin(Date.now() / 400) * 2;
 
+    /* BORDER SOFT + COLȚURI ROTUNJITE */
     ctx.strokeStyle = neon;
-    ctx.lineWidth = 10;
-    ctx.strokeRect(x - size/2 - glow, y - size/2 - glow, size + glow*2, size + glow*2);
+    ctx.lineWidth = 6;
+    ctx.beginPath();
+    ctx.roundRect(x - size/2 - glow, y - size/2 - glow, size + glow*2, size + glow*2, 30);
+    ctx.stroke();
 
+    /* IMAGINE PĂTRATĂ CU COLȚURI ROTUNJITE */
+    ctx.beginPath();
+    ctx.roundRect(x - size/2, y - size/2, size, size, 30);
+    ctx.clip();
     ctx.drawImage(img, x - size/2, y - size/2, size, size);
 
     ctx.restore();
@@ -262,7 +270,7 @@ function spawnExplosion(x, y) {
     setTimeout(() => boom.remove(), 700);
 }
 
-/* ZOOM MARE PĂTRAT */
+/* ZOOM MARE INSTAGRAM */
 function spawnBigProfile(url, username) {
     if (!url) return;
 
@@ -282,7 +290,6 @@ function spawnBigProfile(url, username) {
     const img = document.createElement("img");
     img.src = url;
     img.className = "big-profile";
-    img.style.borderColor = `hsl(${Math.random()*360}, 100%, 50%)`;
 
     const name = document.createElement("div");
     name.className = "big-name-inside";
